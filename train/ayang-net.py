@@ -6,6 +6,10 @@ import torchvision.transforms as transforms
 import h5py
 import random
 import numpy as np
+import os
+
+os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
 f_train = h5py.File('./preprocess/miniplaces_256_train.h5')
@@ -15,10 +19,10 @@ f_val = h5py.File('./preprocess/miniplaces_256_val.h5')
 num_images = 100000
 num_categories = 100
 num_epochs = 1000
-batch_size = 50
+batch_size = 16
 
 val_size = 1000
-val_batch = 20
+val_batch = 16
 
 
 normalize = transforms.Normalize(mean=[127, 127, 127], std=[64, 64, 64])
@@ -28,26 +32,27 @@ class Net(nn.Module):
 		super(Net, self).__init__()
 		self.conv1 = nn.Conv2d(3, 96, 11, stride=4)
 		self.pool = nn.MaxPool2d(2, 2)
-		self.conv2 = nn.Conv2d(96, 256, 5)
+		self.conv2 = nn.Conv2d(96, 256, 5, stride=2)
 		self.conv3 = nn.Conv2d(256, 384, 3)
-		self.conv4 = nn.Conv2d(384, 384, 3)
+		# self.conv4 = nn.Conv2d(384, 384, 3)
 		self.conv5 = nn.Conv2d(384, 256, 3)
-		self.fc1 = nn.Linear(4096, 4096)
-		self.fc2 = nn.Linear(4096, 100)
+		# self.fc1 = nn.Linear(4096, 4096)
+		self.fc1 = nn.Linear(1024, 100)
 
 	def forward(self, x):
 		x = nn.functional.relu(self.conv1(x))
 		x = self.pool(nn.functional.relu(self.conv2(x)))
 		x = self.pool(nn.functional.relu(self.conv3(x)))
-		x = nn.functional.relu(self.conv4(x))
+		# x = nn.functional.relu(self.conv4(x))
 		x = self.pool(nn.functional.relu(self.conv5(x)))
 		# print(x.size())
-		x = x.view(-1, 4096)
-		x = nn.functional.relu(self.fc1(x))
-		x = self.fc2(x)
+		x = x.view(-1, 1024)
+		# x = nn.functional.relu(self.fc1(x))
+		x = self.fc1(x)
 		return x
 
 net = Net()
+net.cuda()
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adagrad(net.parameters(), lr=0.001)
 
@@ -68,9 +73,9 @@ for epoch in range(num_epochs):
 
 		# forward/back prop
 		optimizer.zero_grad()
-		inputs = torch.autograd.Variable(X_train)
+		inputs = torch.autograd.Variable(X_train.cuda())
 		outputs = net(inputs)
-		loss = criterion(outputs, torch.autograd.Variable(Y_train))
+		loss = criterion(outputs, torch.autograd.Variable(Y_train.cuda()))
 		loss.backward()
 		optimizer.step()
 
@@ -87,7 +92,7 @@ for epoch in range(num_epochs):
 		X_val = normalize(X_val)
 		X_val = torch.transpose(X_val, 1, 3)
 
-		inputs_val = torch.autograd.Variable(X_val)
+		inputs_val = torch.autograd.Variable(X_val.cuda())
 		# print(inputs_val.size())
 		outputs_val = net(inputs_val)
 		rows = outputs_val.split(1)
