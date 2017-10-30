@@ -6,33 +6,41 @@ from multiprocessing import Pool
 
 import numpy as np
 import torch
-from hparams import hp
-from networks import PrimitiveRNN
+# from hparams import hp
+from resnet import resnet50
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
+from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 
 import utils
-from data import ShapeNet
-from modules.binvox import Voxel
-from modules.render import render_primitives, render_voxel
+from data import MiniPlace
+
+
+def reconstruct_image(im):
+    mean = np.array([0.485, 0.456, 0.406])
+    std = np.array([0.229, 0.224, 0.225])
+
+    im = 256 * (im * std + mean)
+    return im
 
 
 if __name__ == '__main__':
-    default_path = "/data/vision/billf/jwu-phys/scene3d/dataset/" \
-                   "SceneRGBD/pySceneNetRGBD/data"
+    default_path = './preprocess'
+    loss_fn = CrossEntropyLoss()
 
     # set up argument parser
     parser = argparse.ArgumentParser()
 
     # experiment
-    parser.add_argument('--exp', default = 'actual')
+    parser.add_argument('--exp', default = 'proto')
     parser.add_argument('--resume', default = None, type = str)
     parser.add_argument('--clean', action = 'store_true')
 
     # dataset
     parser.add_argument('--data_path', default = default_path)
     parser.add_argument('--synset', default = '')
+    parser.add_argument('--categories', default = '../data/categories.txt')
 
     # training
     parser.add_argument('--epochs', default = 500, type = int)
@@ -53,14 +61,17 @@ if __name__ == '__main__':
 
     # set up datasets and loaders
     data, loaders = {}, {}
-    for split in ['train', 'test']:
-        data[split] = ShapeNet(data_path = os.path.join(args.data_path, args.synset), split = split)
+    for split in ['train', 'val']:
+        data[split] = MiniPlace(data_path = os.path.join(args.data_path, args.synset), split = split)
         loaders[split] = DataLoader(data[split], batch_size = args.batch, shuffle = True, num_workers = args.workers)
     print('==> dataset loaded')
-    print('[size] = {0} + {1}'.format(len(data['train']), len(data['test'])))
+    print('[size] = {0} + {1}'.format(len(data['train']), len(data['val'])))
+
+    # set up map for different categories
+    categories = np.genfromtxt(args.categories, dtype='str')[:, 0]
 
     # set up model and convert into cuda
-    model = PrimitiveRNN().cuda()
+    model = resnet50(num_classes=100).cuda()
     print('==> model loaded')
 
     # set up optimizer for training
@@ -91,41 +102,21 @@ if __name__ == '__main__':
 
         # training the model
         model.train()
-        for voxels, ((c, s, t, q), lengths) in tqdm(loaders['train'], desc = 'epoch %d' % (epoch + 1)):
-            # convert voxels into cuda tensor
-            voxels = Variable(voxels.cuda()).float()
+        for images, labels in tqdm(loaders['train'], desc = 'epoch %d' % (epoch + 1)):
+            # convert images and labels into cuda tensor
+            images = Variable(images.cuda()).float()
+            labels = Variable(labels.cuda())
 
-            # convert c, s, t and q into cuda tensors
-            c = Variable(c.cuda()).float()
-            s = Variable(s.cuda()).float()
-            t = Variable(t.cuda()).float()
-            q = Variable(q.cuda()).float()
-
-            # set up cstq for inference
-            cstq = torch.cat([c, s, t, q], dim = 2)
-
-            # set up start tokens
-            batch_size = voxels.size(0)
-            stop_token = Variable(torch.from_numpy(hp.stop_token).float()).cuda()
-            stop_tokens = torch.stack([stop_token.unsqueeze(0)] * batch_size)
-
-            # set up labels
-            labels = torch.cat([cstq, stop_tokens], 1)
-
-            # initilize optimizer
+            # initialize optimizer
             optimizer.zero_grad()
 
             # forward pass
-            outputs = model.forward(voxels, cstq)
-            loss, (loss_c, loss_s, loss_t, loss_q) = chamfer_distance(outputs, labels, lengths)
+            outputs = model.forward(images)
+            loss = loss_fn(outputs, labels.squeeze())
 
             # add summary to logger
             logger.scalar_summary('loss', loss.data[0], step)
-            logger.scalar_summary('loss_c', loss_c.data[0], step)
-            logger.scalar_summary('loss_s', loss_s.data[0], step)
-            logger.scalar_summary('loss_t', loss_t.data[0], step)
-            logger.scalar_summary('loss_q', loss_q.data[0], step)
-            step += batch_size
+            step += args.batch
 
             # backward pass
             loss.backward()
@@ -144,37 +135,28 @@ if __name__ == '__main__':
 
             # testing the model
             model.train(False)
-            for split in ['train', 'test']:
+            for split in ['train', 'val']:
                 # sample one batch from dataset
-                voxels, ((c, s, t, q), lengths) = iter(loaders[split]).next()
+                images, labels = iter(loaders[split]).next()
 
-                # convert voxels into cuda tensor
-                voxels = Variable(voxels.cuda()).float()
-
-                # convert c, s, t and q into cuda tensors
-                c = Variable(c.cuda()).float()
-                s = Variable(s.cuda()).float()
-                t = Variable(t.cuda()).float()
-                q = Variable(q.cuda()).float()
-
-                # set up cstq for inference
-                cstq = torch.cat([c, s, t, q], dim = 2)
-
-                # set up start tokens
-                batch_size = voxels.size(0)
-                stop_token = Variable(torch.from_numpy(hp.stop_token).float()).cuda()
-                stop_tokens = torch.stack([stop_token.unsqueeze(0)] * batch_size)
-
-                # set up labels
-                labels = torch.cat([cstq, stop_tokens], 1)
+                images = Variable(images.cuda()).float()
+                labels = Variable(labels.cuda())
 
                 # forward pass
-                outputs = model.forward(voxels)
-
-                # visualize inputs and outputs
-                voxels, outputs, labels = visualize(voxels, outputs, labels)
+                outputs = model.forward(images)
 
                 # add summary to logger
-                logger.image_summary('%s-inputs' % split, voxels, step)
-                logger.image_summary('%s-outputs' % split, outputs, step)
-                logger.image_summary('%s-labels' % split, labels, step)
+                for image, output in zip(images, outputs):
+                    logger.image_summary('{}-outputs, category: {} '.format(split, categories[output]), reconstruct_image(image), step)
+
+            accuracy = []
+            for images, labels in tqdm(loaders['val'], desc = 'epoch %d' % (epoch + 1)):
+                outputs = model.forward(images)
+                outputs = outputs.numpy()
+                labels = labels.numpy()
+
+                outputs_5 = outputs[outputs.argsort()[:, -5:]]
+                correct = (outputs_5 == labels).sum()
+                accuracy.append(correct / args.batch)
+
+            print("Overall top 5 accuracy of model is {} ", np.mean(accuracy))
