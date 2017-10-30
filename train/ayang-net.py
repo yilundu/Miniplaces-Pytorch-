@@ -19,9 +19,9 @@ f_val = h5py.File('./preprocess/miniplaces_256_val.h5')
 num_images = 100000
 num_categories = 100
 num_epochs = 1000
-batch_size = 16
+batch_size = 32
 
-val_size = 1000
+val_size = 10000
 val_batch = 16
 
 
@@ -32,21 +32,22 @@ class Net(nn.Module):
 		super(Net, self).__init__()
 		self.conv1 = nn.Conv2d(3, 96, 11, stride=4)
 		self.pool = nn.MaxPool2d(2, 2)
-		self.conv2 = nn.Conv2d(96, 256, 5, stride=2)
+		self.conv2 = nn.Conv2d(96, 256, 5)
 		self.conv3 = nn.Conv2d(256, 384, 3)
-		# self.conv4 = nn.Conv2d(384, 384, 3)
+		self.conv4 = nn.Conv2d(384, 384, 3)
 		self.conv5 = nn.Conv2d(384, 256, 3)
-		# self.fc1 = nn.Linear(4096, 4096)
-		self.fc1 = nn.Linear(1024, 100)
+		self.fc1 = nn.Linear(4096, num_categories)
+		# self.fc2 = nn.Linear(4096, num_categories)
+		# self.fc1 = nn.Linear(1024, 100)
 
 	def forward(self, x):
 		x = nn.functional.relu(self.conv1(x))
 		x = self.pool(nn.functional.relu(self.conv2(x)))
 		x = self.pool(nn.functional.relu(self.conv3(x)))
-		# x = nn.functional.relu(self.conv4(x))
+		x = nn.functional.relu(self.conv4(x))
 		x = self.pool(nn.functional.relu(self.conv5(x)))
 		# print(x.size())
-		x = x.view(-1, 1024)
+		x = x.view(-1, 4096)
 		# x = nn.functional.relu(self.fc1(x))
 		x = self.fc1(x)
 		return x
@@ -81,12 +82,33 @@ for epoch in range(num_epochs):
 
 		print("Epoch %d Step %d / %d: Loss = %.2f" % (epoch + 1, b / batch_size + 1, num_images / batch_size, loss.data[0]))
 
-	# evaluate val accuracy
-	# count = 0
-	# if epoch % 100 == 99:
+		# evaluate val accuracy
+		# if b % 20000 == (20000 - 32):
+		if b / batch_size % 200 == 199:
+			count = 0
+			for i in range(0, val_batch * 30, val_batch):
+				X_val = torch.Tensor(np.array([f_val['images'][j] for j in range(i, i + val_batch)], dtype=np.float32))
+				Y_val = np.array([f_val['labels'][j] for j in range(i, i + val_batch)], dtype=np.int64)
+				# Y_val = torch.LongTensor(np.array([f_val['labels'][i] for i in range(i, i + val_batch)], dtype=np.int64))
+
+				X_val = normalize(X_val)
+				X_val = torch.transpose(X_val, 1, 3)
+
+				inputs_val = torch.autograd.Variable(X_val.cuda())
+				# print(inputs_val.size())
+				outputs_val = net(inputs_val)
+				rows = outputs_val.split(val_batch)
+				rows = rows[0].data.cpu().numpy()
+				for j in range(len(rows)):
+					tmp = rows[j]
+					tmp = tmp.argsort()[-5:][::-1]
+					if Y_val[j] in tmp:
+						count += 1
+			print("Validation accuracy: %f%%" % (count * 100 / (val_batch * 30)))
+	count = 0
 	for i in range(0, val_size, val_batch):
-		X_val = torch.Tensor(np.array([f_val['images'][i] for i in range(i, i + val_batch)], dtype=np.float32))
-		Y_val = np.array([f_val['labels'][i] for i in range(i, i + val_batch)], dtype=np.int64)
+		X_val = torch.Tensor(np.array([f_val['images'][j] for j in range(i, i + val_batch)], dtype=np.float32))
+		Y_val = np.array([f_val['labels'][j] for j in range(i, i + val_batch)], dtype=np.int64)
 		# Y_val = torch.LongTensor(np.array([f_val['labels'][i] for i in range(i, i + val_batch)], dtype=np.int64))
 
 		X_val = normalize(X_val)
@@ -95,14 +117,13 @@ for epoch in range(num_epochs):
 		inputs_val = torch.autograd.Variable(X_val.cuda())
 		# print(inputs_val.size())
 		outputs_val = net(inputs_val)
-		rows = outputs_val.split(1)
+		rows = outputs_val.split(val_batch)
+		rows = rows[0].data.cpu().numpy()
 		for j in range(len(rows)):
-			# print(row)
-			tmp = rows[j].data.numpy()
-			tmp.argsort()[-5:][::-1]
+			tmp = rows[j]
+			tmp = tmp.argsort()[-5:][::-1]
 			if Y_val[j] in tmp:
 				count += 1
 	print("Validation accuracy: %f%%" % (count * 100 / val_size))
 
-	# flat = model1(input).view(-1, )
 print("Finished training")
