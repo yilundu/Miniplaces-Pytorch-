@@ -104,7 +104,7 @@ for epoch in range(num_epochs):
 					tmp = tmp.argsort()[-5:][::-1]
 					if Y_val[j] in tmp:
 						count += 1
-			print("Validation accuracy: %f%%" % (count * 100 / (val_batch * 30)))
+			print("Validation accuracy: %.2f%%" % (count * 100 / (val_batch * 30)))
 	count = 0
 	for i in range(0, val_size, val_batch):
 		X_val = torch.Tensor(np.array([f_val['images'][j] for j in range(i, i + val_batch)], dtype=np.float32))
