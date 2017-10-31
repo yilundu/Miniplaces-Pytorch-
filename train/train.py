@@ -27,7 +27,7 @@ def reconstruct_image(im):
 
 NAME_TO_MODEL = {
     'resnet50': resnet50(num_classes=100),
-    'ayangnet': AyangNet
+    'ayangnet': AyangNet()
 }
 
 
