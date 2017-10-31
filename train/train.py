@@ -4,6 +4,7 @@ import argparse
 import os
 from multiprocessing import Pool
 
+import utils
 import numpy as np
 import torch
 # from hparams import hp
@@ -12,8 +13,8 @@ from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
+from ayang_net import AyangNet
 
-import utils
 from data import MiniPlace
 
 
