@@ -4,7 +4,6 @@ import argparse
 import os
 from multiprocessing import Pool
 
-import utils
 import numpy as np
 import torch
 # from hparams import hp
@@ -13,22 +12,59 @@ from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
-from ayang_net import AyangNet
 
+import utils
 from data import MiniPlace
 
 
+NAME_TO_MODEL = {
+        'resnet50': resnet50(num_classes=100),
+        'ayangnet': AyangNet
+}
+
+
 def reconstruct_image(im):
+    im = im.numpy()
+    im = np.transpose(im, (1, 2, 0))
     mean = np.array([0.485, 0.456, 0.406])
     std = np.array([0.229, 0.224, 0.225])
 
     im = 256 * (im * std + mean)
     return im
 
-NAME_TO_MODEL = {
-    'resnet50': resnet50(num_classes=100),
-    'ayangnet': AyangNet
-}
+
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+
+def accuracy(output, target, topk=(1,)):
+    """Computes the precision@k for the specified values of k"""
+    maxk = max(topk)
+    batch_size = target.size(0)
+
+    _, pred = output.topk(maxk, 1, True, True)
+    pred = pred.t()
+    correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+    res = []
+    for k in topk:
+        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+        res.append(correct_k.mul_(100.0 / batch_size))
+    return res
 
 
 if __name__ == '__main__':
@@ -39,7 +75,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # experiment
-    parser.add_argument('--exp', default = 'proto')
+    parser.add_argument('--exp', default = 'first')
     parser.add_argument('--resume', default = None, type = str)
     parser.add_argument('--clean', action = 'store_true')
 
@@ -50,8 +86,8 @@ if __name__ == '__main__':
 
     # training
     parser.add_argument('--epochs', default = 500, type = int)
-    parser.add_argument('--batch', default = 16, type = int)
-    parser.add_argument('--snapshot', default = 10, type = int)
+    parser.add_argument('--batch', default = 64, type = int)
+    parser.add_argument('--snapshot', default = 1, type = int)
     parser.add_argument('--workers', default = 8, type = int)
     parser.add_argument('--gpu', default = '7')
     parser.add_argument('--name', default = 'resnet50')
@@ -97,6 +133,7 @@ if __name__ == '__main__':
             snapshot = torch.load(args.resume)
             epoch = snapshot['epoch']
             model.load_state_dict(snapshot['model'])
+            # If this doesn't work, can use optimizer.load_state_dict
             optimizer.load_state_dict(snapshot['optimizer'])
             print('==> snapshot "{0}" loaded (epoch {1})'.format(args.resume, epoch))
         else:
@@ -141,29 +178,29 @@ if __name__ == '__main__':
             print('==> saved snapshot to "{0}"'.format(os.path.join(exp_path, 'epoch-%d.pth' % (epoch + 1))))
 
             # testing the model
-            model.train(False)
+            model.eval()
+            top1 = AverageMeter()
+            top5 = AverageMeter()
             for split in ['train', 'val']:
                 # sample one batch from dataset
                 images, labels = iter(loaders[split]).next()
-
                 images = Variable(images.cuda()).float()
-                labels = Variable(labels.cuda())
 
                 # forward pass
-                outputs = model.forward(images)
+                outputs = model.forward(images).cpu().data
+                images = images.cpu().data
 
                 # add summary to logger
                 for image, output in zip(images, outputs):
-                    logger.image_summary('{}-outputs, category: {} '.format(split, categories[output]), reconstruct_image(image), step)
+                    category = categories[output.numpy().flatten().argmax()]
+                    category = category.replace('/', '_')
+                    logger.image_summary('{}-outputs, category: {} '.format(split, category), [reconstruct_image(image)], step)
 
-            accuracy = []
             for images, labels in tqdm(loaders['val'], desc = 'epoch %d' % (epoch + 1)):
-                outputs = model.forward(images)
-                outputs = outputs.numpy()
-                labels = labels.numpy()
+                outputs = model.forward(images).cpu()
 
-                outputs_5 = outputs[outputs.argsort()[:, -5:]]
-                correct = (outputs_5 == labels).sum()
-                accuracy.append(correct / args.batch)
+                prec1, prec5 = accuracy(outputs.data, labels, topk=(1, 5))
+                top1.update(prec1[0], input.size(0))
+                top5.update(prec5[0], input.size(0))
 
-            print("Overall top 5 accuracy of model is {} ", np.mean(accuracy))
+            print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} in validation'.format(top1=top1, top5=top5))
