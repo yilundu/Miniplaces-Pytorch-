@@ -145,7 +145,7 @@ if __name__ == '__main__':
     for epoch in range(epoch, args.epochs):
         step = epoch * len(data['train'])
 
-        # training the model
+        training the model
         model.train()
         for images, labels in tqdm(loaders['train'], desc = 'epoch %d' % (epoch + 1)):
             # convert images and labels into cuda tensor
@@ -198,10 +198,10 @@ if __name__ == '__main__':
                     logger.image_summary('{}-outputs, category: {} '.format(split, category), [reconstruct_image(image)], step)
 
             for images, labels in tqdm(loaders['val'], desc = 'epoch %d' % (epoch + 1)):
-                outputs = model.forward(images).cpu()
+                outputs = model.forward(Variable(images.cuda())).cpu()
 
                 prec1, prec5 = accuracy(outputs.data, labels, topk=(1, 5))
-                top1.update(prec1[0], input.size(0))
-                top5.update(prec5[0], input.size(0))
+                top1.update(prec1[0], images.size(0))
+                top5.update(prec5[0], images.size(0))
 
             print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} in validation'.format(top1=top1, top5=top5))
