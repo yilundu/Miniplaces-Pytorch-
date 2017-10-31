@@ -1,4 +1,4 @@
-from __future__ import print_function
+from __future__ import print_function, absolute_import
 
 import logging
 import os
@@ -20,10 +20,10 @@ try:
 except ImportError:
     logging.error('{}: failed to import "shell"'.format(thisfile))
 
-try:
-    from . import torch
-except ImportError:
-    logging.error('{}: failed to import "torch"'.format(thisfile))
+# try:
+#     from . import torch
+# except ImportError:
+#     logging.error('{}: failed to import "torch"'.format(thisfile))
 
 try:
     from . import video

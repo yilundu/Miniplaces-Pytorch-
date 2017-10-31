@@ -1,5 +1,5 @@
 # reference: https://gist.github.com/gyglim/1f8dfb1b5c82627ae3efcfbbadb9f514
-from __future__ import print_function
+from __future__ import print_function, absolute_import
 
 import os
 from collections import OrderedDict
@@ -10,7 +10,6 @@ import scipy.misc
 import tensorflow as tf
 
 from . import shell
-
 
 class Logger:
     def __init__(self, path):

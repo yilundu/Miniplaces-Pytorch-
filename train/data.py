@@ -23,13 +23,16 @@ class MiniPlace(Dataset):
             transforms.ToTensor(),
             self.normalize])
 
+        self.labels = np.array(self.dataset['labels'])
+
     def __getitem__(self, index):
         image = self.dataset['images'][index]
-        label = self.dataset['labels'][index]
+        label = self.labels[index]
 
         img_tensor = self.preprocess(Image.fromarray(image))
         label_tensor = torch.LongTensor(np.array([label]).astype(np.int64))
-
+        if label > 99:
+            print(label)
         return img_tensor, label_tensor
 
     def __len__(self):
