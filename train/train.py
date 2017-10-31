@@ -17,12 +17,6 @@ import utils
 from data import MiniPlace
 
 
-NAME_TO_MODEL = {
-        'resnet50': resnet50(num_classes=100),
-        'ayangnet': AyangNet
-}
-
-
 def reconstruct_image(im):
     im = im.numpy()
     im = np.transpose(im, (1, 2, 0))
@@ -65,6 +59,12 @@ def accuracy(output, target, topk=(1,)):
         correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
+
+
+NAME_TO_MODEL = {
+    'resnet50': resnet50(num_classes=100),
+    'ayangnet': AyangNet()
+}
 
 
 if __name__ == '__main__':
