@@ -10,14 +10,17 @@ import utils
 import numpy as np
 import torch
 # from hparams import hp
+from PIL import Image
 from resnet import resnet50
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.nn import CrossEntropyLoss
 from tqdm import tqdm
 from ayang_net import AyangNet
+from torchvision import transforms
 
 from data import MiniPlace
+import scipy.misc
 
 
 def reconstruct_image(im):
@@ -87,8 +90,8 @@ if __name__ == '__main__':
     parser.add_argument('--categories', default = '../data/categories.txt')
 
     # training
-    parser.add_argument('--batch', default = 16, type = int)
-    parser.add_argument('--workers', default = 8, type = int)
+    parser.add_argument('--batch', default = 1, type = int)
+    parser.add_argument('--workers', default = 1, type = int)
     parser.add_argument('--gpu', default = '7')
     parser.add_argument('--name', default = 'resnet50')
 
@@ -106,7 +109,7 @@ if __name__ == '__main__':
     data, loaders = {}, {}
     for split in ['test']:
         data[split] = MiniPlace(data_path = os.path.join(args.data_path, args.synset), split = split)
-        loaders[split] = DataLoader(data[split], batch_size = args.batch, shuffle = True, num_workers = args.workers)
+        loaders[split] = DataLoader(data[split], batch_size = args.batch, shuffle = False, num_workers = args.workers)
     print('==> dataset loaded')
     print('[size] = {0}'.format(len(data['test'])))
 
@@ -131,42 +134,39 @@ if __name__ == '__main__':
     else:
         epoch = 0
 
+    normalize = transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225])
 
-    # # snapshot model and optimizer
-    # snapshot = {
-    #     'epoch': epoch + 1,
-    #     'model': model.state_dict(),
-    #     'optimizer': optimizer.state_dict()
-    # }
+    preprocess = transforms.Compose([
+            transforms.Scale(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize])
 
     # testing the model
     model.eval()
-    # top1 = AverageMeter()
-    # top5 = AverageMeter()
     answers = []
-    for images in tqdm(loaders['test'], desc = 'Testing:'):
-        # sample one batch from dataset
-        images = iter(loaders[split]).next()
-        images = Variable(images.cuda()).float()
-
-        # forward pass
-        outputs = model.forward(images).cpu().data
-        images = images.cpu().data
-
-        # add summary to logger
-
-        for image, output in zip(images, outputs):
-            category = categories[output.numpy().flatten().argmax()]
-            category = category.replace('/', '_')
-            # logger.image_summary('{}-outputs, category: {} '.format(split, category), [reconstruct_image(image)], step)
-            # print(output.numpy().flatten().shape)
+    inds = []
+    ls = []
+    # outputs = []
+    for i in range(0, 10000, 16):
+        list_im = []
+        for j in range(i, i + 16):
+            path = 'test/%08d.jpg' % (j + 1)
+            image = (scipy.misc.imread(os.path.join('../data/images/', path)))
+            image = Image.fromarray(scipy.misc.imresize(image, (256,256)))
+            image = preprocess(image)
+            list_im.append(image)
+        list_im = Variable(torch.stack(list_im).cuda())
+        outputs = model.forward(list_im).cpu().data
+        for output in outputs:
             tmp = output.numpy().flatten()
-            # tmp2 = tmp.
             tmp2 = tmp.argsort()[-5:][::-1]
+            answers.append(tmp2)
             # print(tmp2)
-            # print(tmp[tmp2[0]])
-            answers.append(tmp2.tolist())
-    print(len(answers))
+        if i % 400 == 400 - 16:
+            print(i + 16, " / 10000")
 
     f = open('submit.txt', 'w+')
     for i in range(10000):

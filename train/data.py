@@ -32,7 +32,7 @@ class MiniPlace(Dataset):
         img_tensor = self.preprocess(Image.fromarray(image))
 
         if self.split == 'test':
-            return img_tensor
+            return img_tensor, index
 
         label = self.labels[index]
         label_tensor = torch.LongTensor(np.array([label]).astype(int))
