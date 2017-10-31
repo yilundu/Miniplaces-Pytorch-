@@ -2,3 +2,4 @@ data
 train/preprocess/*.h5
 train/exp/
 *.pyc
+train/submit.txt
