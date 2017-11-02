@@ -12,6 +12,7 @@ from resnet import resnet50
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.nn import CrossEntropyLoss
+import torchvision.models as models
 from tqdm import tqdm
 from ayang_net import AyangNet
 
@@ -64,7 +65,8 @@ def accuracy(output, target, topk=(1,)):
 
 NAME_TO_MODEL = {
     'resnet50': resnet50(num_classes=100),
-    'ayangnet': AyangNet()
+    'ayangnet': AyangNet(),
+    'densenet': models.densenet201(num_classes=100),
 }
 
 
@@ -87,7 +89,7 @@ if __name__ == '__main__':
 
     # training
     parser.add_argument('--epochs', default = 500, type = int)
-    parser.add_argument('--batch', default = 64, type = int)
+    parser.add_argument('--batch', default = 16, type = int)
     parser.add_argument('--snapshot', default = 1, type = int)
     parser.add_argument('--workers', default = 8, type = int)
     parser.add_argument('--gpu', default = '7')
@@ -106,7 +108,10 @@ if __name__ == '__main__':
     # set up datasets and loaders
     data, loaders = {}, {}
     for split in ['train', 'val']:
-        data[split] = MiniPlace(data_path = os.path.join(args.data_path, args.synset), split = split)
+        if split == 'train':
+            data[split] = MiniPlace(data_path = os.path.join(args.data_path, args.synset), split = split)
+        else:
+            data[split] = MiniPlace(data_path = os.path.join(args.data_path, args.synset), split = split, augment= False)
         loaders[split] = DataLoader(data[split], batch_size = args.batch, shuffle = True, num_workers = args.workers)
     print('==> dataset loaded')
     print('[size] = {0} + {1}'.format(len(data['train']), len(data['val'])))
@@ -119,7 +124,7 @@ if __name__ == '__main__':
     print('==> model loaded')
 
     # set up optimizer for training
-    optimizer = torch.optim.Adam(model.parameters(), lr=5e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     print('==> optimizer loaded')
 
     # set up experiment path
@@ -182,20 +187,20 @@ if __name__ == '__main__':
             model.eval()
             top1 = AverageMeter()
             top5 = AverageMeter()
-            for split in ['train', 'val']:
-                # sample one batch from dataset
-                images, labels = iter(loaders[split]).next()
-                images = Variable(images.cuda()).float()
+            # for split in ['train', 'val']:
+            #     # sample one batch from dataset
+            #     images, labels = iter(loaders[split]).next()
+            #     images = Variable(images.cuda()).float()
 
-                # forward pass
-                outputs = model.forward(images).cpu().data
-                images = images.cpu().data
+            #     # forward pass
+            #     outputs = model.forward(images).cpu().data
+            #     images = images.cpu().data
 
-                # add summary to logger
-                for image, output in zip(images, outputs):
-                    category = categories[output.numpy().flatten().argmax()]
-                    category = category.replace('/', '_')
-                    logger.image_summary('{}-outputs, category: {} '.format(split, category), [reconstruct_image(image)], step)
+            #     # add summary to logger
+            #     for image, output in zip(images, outputs):
+            #         category = categories[output.numpy().flatten().argmax()]
+            #         category = category.replace('/', '_')
+            #         logger.image_summary('{}-outputs, category: {} '.format(split, category), [reconstruct_image(image)], step)
 
             for images, labels in tqdm(loaders['val'], desc = 'epoch %d' % (epoch + 1)):
                 outputs = model.forward(Variable(images.cuda())).cpu()

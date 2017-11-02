@@ -4,12 +4,13 @@ from PIL import Image
 import numpy as np
 
 from torch.utils.data import Dataset
-from torchvision import transforms
+# from torchvision import transforms
+import transforms
 import torch
 
 
 class MiniPlace(Dataset):
-    def __init__(self, data_path, split):
+    def __init__(self, data_path, split, augment=True):
         file_path = os.path.join(data_path, 'miniplaces_256_{}.h5'.format(split))
         self.dataset = h5py.File(file_path)
 
@@ -17,11 +18,22 @@ class MiniPlace(Dataset):
             mean=[0.485, 0.456, 0.406],
             std=[0.229, 0.224, 0.225])
 
-        self.preprocess = transforms.Compose([
+        transform = [
             transforms.Scale(256),
-            transforms.CenterCrop(224),
+            transforms.RandomCrop(224)]
+
+        if augment:
+            transform.extend([
+            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomVerticalFlip(),
+            ])
+
+        transform += [
             transforms.ToTensor(),
-            self.normalize])
+            self.normalize]
+
+        self.preprocess = transforms.Compose(transform)
 
         self.split = split
         if split != 'test':

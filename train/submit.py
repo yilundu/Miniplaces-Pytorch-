@@ -15,6 +15,7 @@ from resnet import resnet50
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.nn import CrossEntropyLoss
+import torchvision.models as models
 from tqdm import tqdm
 from ayang_net import AyangNet
 from torchvision import transforms
@@ -69,7 +70,8 @@ def accuracy(output, target, topk=(1,)):
 
 NAME_TO_MODEL = {
     'resnet50': resnet50(num_classes=100),
-    'ayangnet': AyangNet()
+    'ayangnet': AyangNet(),
+    'densenet': models.densenet169(num_classes=100)
 }
 
 
@@ -140,7 +142,7 @@ if __name__ == '__main__':
 
     preprocess = transforms.Compose([
             transforms.Scale(256),
-            transforms.CenterCrop(224),
+            transforms.RandomCrop(224),
             transforms.ToTensor(),
             normalize])
 
@@ -151,15 +153,17 @@ if __name__ == '__main__':
     ls = []
     # outputs = []
     for i in range(0, 10000, 16):
-        list_im = []
-        for j in range(i, i + 16):
-            path = 'test/%08d.jpg' % (j + 1)
-            image = (scipy.misc.imread(os.path.join('../data/images/', path)))
-            image = Image.fromarray(scipy.misc.imresize(image, (256,256)))
-            image = preprocess(image)
-            list_im.append(image)
-        list_im = Variable(torch.stack(list_im).cuda())
-        outputs = model.forward(list_im).cpu().data
+        outputs = torch.zeros(16, 100)
+        for k in range(5):
+            list_im = []
+            for j in range(i, i + 16):
+                path = 'test/%08d.jpg' % (j + 1)
+                image = (scipy.misc.imread(os.path.join('../data/images/', path)))
+                image = Image.fromarray(scipy.misc.imresize(image, (256,256)))
+                image = preprocess(image)
+                list_im.append(image)
+            list_im = Variable(torch.stack(list_im).cuda())
+            outputs += model.forward(list_im).cpu().data
         for output in outputs:
             tmp = output.numpy().flatten()
             tmp2 = tmp.argsort()[-5:][::-1]
