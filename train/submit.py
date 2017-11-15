@@ -71,7 +71,7 @@ def accuracy(output, target, topk=(1,)):
 NAME_TO_MODEL = {
     'resnet50': resnet50(num_classes=100),
     'ayangnet': AyangNet(),
-    'densenet': models.densenet169(num_classes=100)
+    'densenet': models.densenet201(num_classes=100)
 }
 
 
@@ -154,7 +154,7 @@ if __name__ == '__main__':
     # outputs = []
     for i in range(0, 10000, 16):
         outputs = torch.zeros(16, 100)
-        for k in range(5):
+        for k in range(11):
             list_im = []
             for j in range(i, i + 16):
                 path = 'test/%08d.jpg' % (j + 1)

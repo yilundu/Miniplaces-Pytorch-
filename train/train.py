@@ -12,6 +12,7 @@ from resnet import resnet50
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from torch.nn import CrossEntropyLoss
+from torch.nn.utils import clip_grad_norm
 import torchvision.models as models
 from tqdm import tqdm
 from ayang_net import AyangNet
@@ -45,6 +46,13 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+
+
+def adjust_learning_rate(optimizer, epoch):
+    """Sets the learning rate to the initial LR decayed by 10 every 10 epochs"""
+    lr = args.lr * (0.1 ** (epoch // 10))
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
 
 
 def accuracy(output, target, topk=(1,)):
@@ -90,11 +98,16 @@ if __name__ == '__main__':
 
     # training
     parser.add_argument('--epochs', default = 500, type = int)
-    parser.add_argument('--batch', default = 16, type = int)
-    parser.add_argument('--snapshot', default = 1, type = int)
+    parser.add_argument('--batch', default = 64, type = int)
+    parser.add_argument('--snapshot', default = 4, type = int)
     parser.add_argument('--workers', default = 8, type = int)
     parser.add_argument('--gpu', default = '7')
     parser.add_argument('--name', default = 'resnet50')
+
+    # Training Parameters
+    parser.add_argument('--lr', default = 0.001, type = float)
+    parser.add_argument('--momentum', default = 0.9, type = float)
+    parser.add_argument('--weight_decay', default = 1e-4, type = float)
 
     # parse arguments
     args = parser.parse_args()
@@ -125,7 +138,10 @@ if __name__ == '__main__':
     print('==> model loaded')
 
     # set up optimizer for training
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
+    optimizer = torch.optim.SGD(model.parameters(), args.lr,
+                                momentum = args.momentum,
+                                weight_decay = args.weight_decay)
     print('==> optimizer loaded')
 
     # set up experiment path
@@ -171,6 +187,7 @@ if __name__ == '__main__':
 
             # backward pass
             loss.backward()
+            clip_grad_norm(model.parameters(), 1.0)
             optimizer.step()
 
         if args.snapshot != 0 and (epoch + 1) % args.snapshot == 0:
