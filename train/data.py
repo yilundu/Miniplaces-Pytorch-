@@ -24,7 +24,7 @@ class MiniPlace(Dataset):
 
         if augment:
             transform.extend([
-            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1),
+            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.0, hue=0.0),
             transforms.RandomHorizontalFlip(),
             # transforms.RandomVerticalFlip(),
             ])

@@ -81,6 +81,7 @@ NAME_TO_MODEL = {
 
 if __name__ == '__main__':
     default_path = './preprocess'
+    noise_decay = 0.55
     loss_fn = CrossEntropyLoss()
 
     # set up argument parser
@@ -99,7 +100,7 @@ if __name__ == '__main__':
     # training
     parser.add_argument('--epochs', default = 500, type = int)
     parser.add_argument('--batch', default = 64, type = int)
-    parser.add_argument('--snapshot', default = 4, type = int)
+    parser.add_argument('--snapshot', default = 2, type = int)
     parser.add_argument('--workers', default = 8, type = int)
     parser.add_argument('--gpu', default = '7')
     parser.add_argument('--name', default = 'resnet50')
@@ -108,6 +109,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', default = 0.001, type = float)
     parser.add_argument('--momentum', default = 0.9, type = float)
     parser.add_argument('--weight_decay', default = 1e-4, type = float)
+    parser.add_argument('--noise', default = 0, type = float)
 
     # parse arguments
     args = parser.parse_args()
@@ -169,6 +171,8 @@ if __name__ == '__main__':
 
         # training the model
         model.train()
+        sigma = args.noise / (1 + epoch) ** noise_decay
+
         for images, labels in tqdm(loaders['train'], desc = 'epoch %d' % (epoch + 1)):
             # convert images and labels into cuda tensor
             images = Variable(images.cuda()).float()
@@ -185,9 +189,17 @@ if __name__ == '__main__':
             logger.scalar_summary('loss', loss.data[0], step)
             step += args.batch
 
+            # Add noise to gradients
+            for w in model.parameters():
+                if w.grad is not None:
+                    w.grad.data.normal_(mean = 0, std = sigma)
+
             # backward pass
             loss.backward()
-            clip_grad_norm(model.parameters(), 1.0)
+
+            # Clip gradient norms
+            clip_grad_norm(model.parameters(), 10.0)
+
             optimizer.step()
 
         if args.snapshot != 0 and (epoch + 1) % args.snapshot == 0:
