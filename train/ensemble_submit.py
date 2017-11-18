@@ -4,7 +4,7 @@
 import numpy as np
 import pandas as pd
 
-paths = ['submit4.txt']
+paths = ['submit2.txt', 'submit4.txt']
 # add paths here
 
 default_path = './predictions/'

@@ -33,10 +33,10 @@ class MiniPlace(Dataset):
 
         transform += [transforms.ToTensor()]
 
-        if augment:
-            transform.append(
-            affine_transforms.Affine(rotation_range=10.0, translation_range=0.1, zoom_range=(0.5, 1.0), fill_mode='constant')
-            )
+        # if augment:
+        #     transform.append(
+        #     affine_transforms.Affine(rotation_range=10.0, translation_range=0.1, zoom_range=(0.5, 1.0), fill_mode='constant')
+        #     )
 
         transform += [
             self.normalize]

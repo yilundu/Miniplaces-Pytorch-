@@ -21,6 +21,7 @@ import torchvision.models as models
 from tqdm import tqdm
 from ayang_net import AyangNet
 import transforms
+import affine_transforms
 
 from data import MiniPlace
 import scipy.misc
@@ -156,6 +157,7 @@ if __name__ == '__main__':
             transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.0, hue=0.0),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
+            affine_transforms.Affine(rotation_range=10.0, translation_range=0.1, zoom_range=(0.5, 1.0), fill_mode='constant'),
             normalize])
 
     # testing the model
@@ -166,7 +168,7 @@ if __name__ == '__main__':
     # outputs = []
     for i in range(0, 10000, 16):
         outputs = np.zeros((16, 100))
-        for k in range(5):
+        for k in range(11):
             list_im = []
             for j in range(i, i + 16):
                 path = 'test/%08d.jpg' % (j + 1)

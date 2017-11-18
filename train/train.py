@@ -170,6 +170,7 @@ if __name__ == '__main__':
 
     for epoch in range(epoch, args.epochs):
         step = epoch * len(data['train'])
+        adjust_learning_rate(optimizer, epoch)
 
         # training the model
         model.train()
