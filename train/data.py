@@ -6,6 +6,7 @@ import numpy as np
 from torch.utils.data import Dataset
 # from torchvision import transforms
 import transforms
+import affine_transforms
 import torch
 
 
@@ -20,7 +21,8 @@ class MiniPlace(Dataset):
 
         transform = [
             transforms.Scale(256),
-            transforms.RandomCrop(224)]
+            transforms.RandomCrop(224),
+            ]
 
         if augment:
             transform.extend([
@@ -29,8 +31,14 @@ class MiniPlace(Dataset):
             # transforms.RandomVerticalFlip(),
             ])
 
+        transform += [transforms.ToTensor()]
+
+        if augment:
+            transform.append(
+            affine_transforms.Affine(rotation_range=10.0, translation_range=0.1, zoom_range=(0.5, 1.0), fill_mode='constant')
+            )
+
         transform += [
-            transforms.ToTensor(),
             self.normalize]
 
         self.preprocess = transforms.Compose(transform)

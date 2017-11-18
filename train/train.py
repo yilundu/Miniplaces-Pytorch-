@@ -19,6 +19,7 @@ from ayang_net import AyangNet
 
 from data import MiniPlace
 from inception import inception_v3
+from wideresnet import WideResNet
 
 def reconstruct_image(im):
     im = im.numpy()
@@ -75,7 +76,8 @@ NAME_TO_MODEL = {
     'resnet50': resnet50(num_classes=100),
     'ayangnet': AyangNet(),
     'densenet': models.densenet201(num_classes=100),
-    'inceptionv3': inception_v3(num_classes=100)
+    'inceptionv3': inception_v3(num_classes=100),
+    'wideresnet': WideResNet(28, 100, widen_factor=10)
 }
 
 

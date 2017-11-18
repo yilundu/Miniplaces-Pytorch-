@@ -5,6 +5,7 @@ from __future__ import print_function
 import argparse
 import os
 from multiprocessing import Pool
+from scipy.misc import logsumexp
 
 import utils
 import numpy as np
@@ -19,7 +20,7 @@ from torch.nn import CrossEntropyLoss
 import torchvision.models as models
 from tqdm import tqdm
 from ayang_net import AyangNet
-from torchvision import transforms
+import transforms
 
 from data import MiniPlace
 import scipy.misc
@@ -74,6 +75,11 @@ NAME_TO_MODEL = {
     'ayangnet': AyangNet(),
     'densenet': models.densenet169(num_classes=100)
 }
+
+def compute_softmax(i):
+    i = i - i.min(axis=1, keepdims=True)
+    log_sum = logsumexp(i, axis=1, keepdims=True)
+    return i - log_sum
 
 
 if __name__ == '__main__':
@@ -147,6 +153,8 @@ if __name__ == '__main__':
     preprocess = transforms.Compose([
             transforms.Scale(256),
             transforms.RandomCrop(224),
+            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.0, hue=0.0),
+            transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize])
 
@@ -157,7 +165,7 @@ if __name__ == '__main__':
     ls = []
     # outputs = []
     for i in range(0, 10000, 16):
-        outputs = torch.zeros(16, 100)
+        outputs = np.zeros((16, 100))
         for k in range(5):
             list_im = []
             for j in range(i, i + 16):
@@ -167,23 +175,15 @@ if __name__ == '__main__':
                 image = preprocess(image)
                 list_im.append(image)
             list_im = Variable(torch.stack(list_im).cuda())
-            outputs += model.forward(list_im).cpu().data
+            temp_output = model.forward(list_im).cpu().data.numpy()
+            temp_softmax = compute_softmax(temp_output)
+            outputs += temp_softmax
         for output in outputs:
-            tmp = output.numpy().flatten()
+            tmp = output.flatten()
             # tmp2 = tmp.argsort()[-5:][::-1]
             answers.append(tmp)
             # print(tmp2)
         if i % 400 == 400 - 16:
             print(i + 16, " / 10000")
 
-    out = pd.DataFrame(data=answers)
-    out.to_csv('predictions/' + args.output)
-    # f = open('predictions/' + args.output, 'w+')
-    # for i in range(10000):
-    #     s = 'test/%08d.jpg' % (i + 1)
-    #     for ans in answers[i]:
-    #         s += ' ' + str(ans)
-    #     f.write(s + '\n')
-    #     if i % 100 == 99:
-    #         print(i + 1, " / 10000")
-    # f.close()
+    np.savetxt('predictions/' + args.output, np.array(answers))

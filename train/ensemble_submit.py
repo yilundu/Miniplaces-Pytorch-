@@ -4,19 +4,20 @@
 import numpy as np
 import pandas as pd
 
-paths = ['submit-1.csv', 'submit-1.csv']
+paths = ['submit4.txt']
 # add paths here
 
 default_path = './predictions/'
 
-probs = pd.read_csv(default_path + paths[0])
+probs = np.loadtxt(default_path + paths[0])
 for i in range(1, len(paths)):
-	probs += pd.read_csv(default_path + paths[i])
+    temp_prob = np.loadtxt(default_path + paths[i])
+    probs += temp_prob
 
 f = open('submit.txt', 'w+')
 for i in range(10000):
     s = 'test/%08d.jpg' % (i + 1)
-    tmp = probs.iloc[i,1:].as_matrix()
+    tmp = probs[i,:]
     tmp2 = tmp.argsort()[-5:][::-1]
     for ans in tmp2:
         s += ' ' + str(ans)
