@@ -8,10 +8,12 @@ from torch.utils.data import Dataset
 import transforms
 import affine_transforms
 import torch
+import time
 
 
 class MiniPlace(Dataset):
-    def __init__(self, data_path, split, augment=True):
+    def __init__(self, data_path, split, augment=True, load_everything=True):
+        self.count = 0
         file_path = os.path.join(data_path, 'miniplaces_256_{}.h5'.format(split))
         self.dataset = h5py.File(file_path)
 
@@ -26,13 +28,17 @@ class MiniPlace(Dataset):
 
         if augment:
             transform.extend([
-            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.0, hue=0.0),
+            # transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.0, hue=0.0),
             transforms.RandomHorizontalFlip(),
             # transforms.RandomVerticalFlip(),
             ])
 
         transform += [transforms.ToTensor()]
 
+        if augment:
+            transform.append(
+                affine_transforms.Affine(rotation_range=5.0, zoom_range=(0.85, 1.0), fill_mode='constant')
+            )
         # if augment:
         #     transform.append(
         #     affine_transforms.Affine(rotation_range=10.0, translation_range=0.1, zoom_range=(0.5, 1.0), fill_mode='constant')
@@ -46,9 +52,17 @@ class MiniPlace(Dataset):
         self.split = split
         if split != 'test':
             self.labels = np.array(self.dataset['labels'])
+        self.load_everything = load_everything
+        if self.load_everything:
+            self.images = np.array(self.dataset['images'])
 
     def __getitem__(self, index):
-        image = self.dataset['images'][index]
+        self.count += 1
+
+        if self.load_everything:
+            image = self.images[index]
+        else:
+            image = self.dataset['images'][index]
         img_tensor = self.preprocess(Image.fromarray(image))
 
         if self.split == 'test':

@@ -21,6 +21,7 @@ from data import MiniPlace
 from inception import inception_v3
 from wideresnet import WideResNet
 from densenet import DenseNet
+import time
 
 def reconstruct_image(im):
     im = im.numpy()
@@ -182,14 +183,12 @@ if __name__ == '__main__':
             # convert images and labels into cuda tensor
             images = Variable(images.cuda()).float()
             labels = Variable(labels.cuda())
-
             # initialize optimizer
             optimizer.zero_grad()
 
             # forward pass
             outputs = model.forward(images)
             loss = loss_fn(outputs, labels.squeeze())
-
             # add summary to logger
             logger.scalar_summary('loss', loss.data[0], step)
             step += args.batch
@@ -206,6 +205,7 @@ if __name__ == '__main__':
             clip_grad_norm(model.parameters(), 10.0)
 
             optimizer.step()
+
 
         if args.snapshot != 0 and (epoch + 1) % args.snapshot == 0:
             # snapshot model and optimizer

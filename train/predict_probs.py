@@ -119,12 +119,12 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
     # set up datasets and loaders
-    data, loaders = {}, {}
-    for split in ['test']:
-        data[split] = MiniPlace(data_path = os.path.join(args.data_path, args.synset), split = split)
-        loaders[split] = DataLoader(data[split], batch_size = args.batch, shuffle = False, num_workers = args.workers)
-    print('==> dataset loaded')
-    print('[size] = {0}'.format(len(data['test'])))
+    # data, loaders = {}, {}
+    # for split in ['test']:
+    #     data[split] = MiniPlace(data_path = os.path.join(args.data_path, args.synset), split = split)
+    #     loaders[split] = DataLoader(data[split], batch_size = args.batch, shuffle = False, num_workers = args.workers)
+    # print('==> dataset loaded')
+    # print('[size] = {0}'.format(len(data['test'])))
 
     # set up map for different categories
     categories = np.genfromtxt(args.categories, dtype='str')[:, 0]
@@ -154,26 +154,30 @@ if __name__ == '__main__':
     preprocess = transforms.Compose([
             transforms.Scale(256),
             transforms.RandomCrop(224),
-            transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.0, hue=0.0),
+            # transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.0, hue=0.0),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            affine_transforms.Affine(rotation_range=10.0, translation_range=0.1, zoom_range=(0.5, 1.0), fill_mode='constant'),
+            # affine_transforms.Affine(rotation_range=10.0, translation_range=0.1, zoom_range=(0.5, 1.0), fill_mode='constant'),
             normalize])
 
     # testing the model
+    images = np.load('./preprocess/miniplaces_256_test.npz')['arr_0']
+    # print(images.files)
     model.eval()
     answers = []
     inds = []
     ls = []
+
     # outputs = []
     for i in range(0, 10000, 16):
         outputs = np.zeros((16, 100))
         for k in range(11):
             list_im = []
             for j in range(i, i + 16):
-                path = 'test/%08d.jpg' % (j + 1)
-                image = (scipy.misc.imread(os.path.join('../data/images/', path)))
-                image = Image.fromarray(scipy.misc.imresize(image, (256,256)))
+                # path = 'test/%08d.jpg' % (j + 1)
+                # image = (scipy.misc.imread(os.path.join('../data/images/', path)))
+                # image = Image.fromarray(scipy.misc.imresize(image, (256,256)))
+                image = Image.fromarray(images[j])
                 image = preprocess(image)
                 list_im.append(image)
             list_im = Variable(torch.stack(list_im).cuda())
