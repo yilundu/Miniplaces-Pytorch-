@@ -52,7 +52,7 @@ class AverageMeter(object):
 
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 10 epochs"""
-    lr = args.lr * (0.1 ** (epoch // 10))
+    lr = args.lr * (0.3 ** (epoch // 7))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     # Training Parameters
     parser.add_argument('--lr', default = 0.001, type = float)
     parser.add_argument('--momentum', default = 0.9, type = float)
-    parser.add_argument('--weight_decay', default = 1e-4, type = float)
+    parser.add_argument('--weight_decay', default = 1e-5, type = float)
     parser.add_argument('--noise', default = 0, type = float)
 
     # parse arguments

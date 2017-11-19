@@ -165,10 +165,12 @@ if __name__ == '__main__':
     answers = []
     inds = []
     ls = []
+    num_rep = 11
+
     # outputs = []
     for i in range(0, 10000, 16):
         outputs = np.zeros((16, 100))
-        for k in range(11):
+        for k in range(num_rep):
             list_im = []
             for j in range(i, i + 16):
                 path = 'test/%08d.jpg' % (j + 1)
@@ -182,6 +184,7 @@ if __name__ == '__main__':
             outputs += temp_softmax
         for output in outputs:
             tmp = output.flatten()
+            tmp /= num_rep
             # tmp2 = tmp.argsort()[-5:][::-1]
             answers.append(tmp)
             # print(tmp2)
