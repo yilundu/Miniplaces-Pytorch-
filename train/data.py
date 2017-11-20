@@ -23,23 +23,23 @@ class MiniPlace(Dataset):
 
         transform = [
             transforms.Scale(256),
-            # transforms.RandomCrop(224),
-            transforms.RandomResizedCrop(224)
+            transforms.RandomCrop(224),
+            # transforms.RandomResizedCrop(224)
             ]
 
         if augment:
             transform.extend([
-            transforms.ColorJitter(brightness=0.0, contrast=0.0, saturation=0.3, hue=0.05),
+            transforms.ColorJitter(brightness=0.1, contrast=0.0, saturation=0.3, hue=0.05),
             transforms.RandomHorizontalFlip(),
             # transforms.RandomVerticalFlip(),
             ])
 
         transform += [transforms.ToTensor()]
 
-        # if augment:
-        #     transform.append(
-        #         affine_transforms.Affine(rotation_range=5.0, zoom_range=(0.85, 1.0), fill_mode='constant')
-        #     )
+        if augment:
+            transform.append(
+                affine_transforms.Affine(rotation_range=5.0, zoom_range=(0.85, 1.0), fill_mode='constant')
+            )
         # if augment:
         #     transform.append(
         #     affine_transforms.Affine(rotation_range=10.0, translation_range=0.1, zoom_range=(0.5, 1.0), fill_mode='constant')

@@ -74,7 +74,7 @@ def accuracy(output, target, topk=(1,)):
 NAME_TO_MODEL = {
     'resnet50': resnet50(num_classes=100),
     'ayangnet': AyangNet(),
-    'densenet': models.densenet169(num_classes=100)
+    'densenet': models.densenet161(num_classes=100)
 }
 
 def compute_softmax(i):
@@ -154,10 +154,10 @@ if __name__ == '__main__':
     preprocess = transforms.Compose([
             transforms.Scale(256),
             transforms.RandomCrop(224),
-            # transforms.ColorJitter(brightness=0.1, contrast=0.1, saturation=0.0, hue=0.0),
+            transforms.ColorJitter(brightness=0.1, contrast=0.0, saturation=0.3, hue=0.05),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
-            # affine_transforms.Affine(rotation_range=10.0, translation_range=0.1, zoom_range=(0.5, 1.0), fill_mode='constant'),
+            affine_transforms.Affine(rotation_range=5.0, zoom_range=(0.85, 1.0), fill_mode='constant'),
             normalize])
 
     # testing the model

@@ -53,7 +53,7 @@ class AverageMeter(object):
 
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 10 epochs"""
-    lr = args.lr * (0.3 ** (epoch // 7))
+    lr = args.lr * (0.3 ** (epoch // 10))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
@@ -77,7 +77,7 @@ def accuracy(output, target, topk=(1,)):
 NAME_TO_MODEL = {
     'resnet50': resnet50(num_classes=100),
     'ayangnet': AyangNet(),
-    'densenet': models.densenet201(num_classes=100),
+    'densenet': models.densenet161(num_classes=100),
     'inceptionv3': inception_v3(num_classes=100),
     'wideresnet': WideResNet(28, 100, widen_factor=10),
     'widedensenet': DenseNet(60, (6, 6, 6, 6), 64, num_classes=100)
@@ -104,14 +104,14 @@ if __name__ == '__main__':
 
     # training
     parser.add_argument('--epochs', default = 500, type = int)
-    parser.add_argument('--batch', default = 64, type = int)
+    parser.add_argument('--batch', default = 16, type = int)
     parser.add_argument('--snapshot', default = 2, type = int)
     parser.add_argument('--workers', default = 8, type = int)
     parser.add_argument('--gpu', default = '7')
     parser.add_argument('--name', default = 'resnet50')
 
     # Training Parameters
-    parser.add_argument('--lr', default = 0.001, type = float)
+    parser.add_argument('--lr', default = 0.1, type = float)
     parser.add_argument('--momentum', default = 0.9, type = float)
     parser.add_argument('--weight_decay', default = 1e-5, type = float)
     parser.add_argument('--noise', default = 0, type = float)
@@ -143,11 +143,13 @@ if __name__ == '__main__':
     # set up model and convert into cuda
     model = NAME_TO_MODEL[args.name].cuda()
     print('==> model loaded')
+    best_top_5 = 0
 
     # set up optimizer for training
     # optimizer = torch.optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
     optimizer = torch.optim.SGD(model.parameters(), args.lr,
                                 momentum = args.momentum,
+                                nesterov = True,
                                 weight_decay = args.weight_decay)
     print('==> optimizer loaded')
 
@@ -177,7 +179,7 @@ if __name__ == '__main__':
 
         # training the model
         model.train()
-        sigma = args.noise / (1 + epoch) ** noise_decay
+        sigma = args.noise / ((1 + epoch) ** noise_decay)
 
         for images, labels in tqdm(loaders['train'], desc = 'epoch %d' % (epoch + 1)):
             # convert images and labels into cuda tensor
@@ -208,16 +210,6 @@ if __name__ == '__main__':
 
 
         if args.snapshot != 0 and (epoch + 1) % args.snapshot == 0:
-            # snapshot model and optimizer
-            snapshot = {
-                'epoch': epoch + 1,
-                'model': model.state_dict(),
-                'optimizer': optimizer.state_dict()
-            }
-            torch.save(snapshot, os.path.join(exp_path, 'epoch-%d.pth' % (epoch + 1)))
-            torch.save(snapshot, os.path.join(exp_path, 'latest.pth'))
-            print('==> saved snapshot to "{0}"'.format(os.path.join(exp_path, 'epoch-%d.pth' % (epoch + 1))))
-
             # testing the model
             model.eval()
             top1 = AverageMeter()
@@ -243,6 +235,18 @@ if __name__ == '__main__':
                 prec1, prec5 = accuracy(outputs.data, labels, topk=(1, 5))
                 top1.update(prec1[0], images.size(0))
                 top5.update(prec5[0], images.size(0))
+
+            if top5.avg > best_top_5:
+                best_top_5 = top5.avg
+
+                # snapshot model and optimizer
+                snapshot = {
+                    'epoch': epoch + 1,
+                    'model': model.state_dict(),
+                    'optimizer': optimizer.state_dict()
+                }
+                torch.save(snapshot, os.path.join(exp_path, 'best.pth'))
+                print('==> saved snapshot to "{0}"'.format(os.path.join(exp_path, 'best.pth')))
 
             print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} in validation'.format(top1=top1, top5=top5))
             logger.scalar_summary('Top 1', top1.avg, epoch)
