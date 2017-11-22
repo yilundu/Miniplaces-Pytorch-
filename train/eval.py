@@ -22,7 +22,13 @@ from inception import inception_v3
 from inception2 import inception_v4
 from wideresnet import WideResNet
 from densenet import DenseNet
+from PIL import Image
 import time
+import transforms
+import affine_transforms
+import h5py
+from scipy.misc import logsumexp
+
 
 def reconstruct_image(im):
     im = im.numpy()
@@ -73,6 +79,11 @@ def accuracy(output, target, topk=(1,)):
         correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
+
+def compute_softmax(i):
+    i = i - i.min(axis=1, keepdims=True)
+    log_sum = logsumexp(i, axis=1, keepdims=True)
+    return i - log_sum
 
 
 NAME_TO_MODEL = {
@@ -129,15 +140,9 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
     # set up datasets and loaders
-    data, loaders = {}, {}
-    for split in ['train', 'val']:
-        if split == 'train':
-            data[split] = MiniPlace(data_path = os.path.join(args.data_path, args.synset), split = split)
-        else:
-            data[split] = MiniPlace(data_path = os.path.join(args.data_path, args.synset), split = split, augment= False)
-        loaders[split] = DataLoader(data[split], batch_size = args.batch, shuffle = True, num_workers = args.workers)
-    print('==> dataset loaded')
-    print('[size] = {0} + {1}'.format(len(data['train']), len(data['val'])))
+    file_path = './preprocess/miniplaces_256_val.h5'
+    dataset = h5py.File(file_path)
+
 
     # set up map for different categories
     categories = np.genfromtxt(args.categories, dtype='str')[:, 0]
@@ -147,19 +152,34 @@ if __name__ == '__main__':
     print('==> model loaded')
     best_top_5 = 0
 
-    # set up optimizer for training
-    # optimizer = torch.optim.Adam(model.parameters(), lr=1e-5, weight_decay=1e-5)
-    optimizer = torch.optim.SGD(model.parameters(), args.lr,
-                                momentum = args.momentum,
-                                nesterov = True,
-                                weight_decay = args.weight_decay)
-    print('==> optimizer loaded')
+    normalize = transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225])
 
-    # set up experiment path
-    exp_path = os.path.join('exp', args.exp)
-    utils.shell.mkdir(exp_path, clean = args.clean)
-    logger = utils.Logger(exp_path)
-    print('==> save logs to {0}'.format(exp_path))
+    transform = [
+        transforms.Scale(256),
+        transforms.RandomCrop(224),
+        # transforms.RandomResizedCrop(224)
+    ]
+    # transform.extend([transforms.RandomResizedCrop(224)])
+    transform.extend([
+        # for inception 1
+        # transforms.ColorJitter(brightness=0.05, contrast=0.05, saturation=0.1, hue=0.0),
+        transforms.ColorJitter(brightness=0.05, contrast=0.05, saturation=0.35, hue=0.1),
+        # transforms.ColorJitter(brightness=0.05, contrast=0.05, saturation=0.3, hue=0.1),
+        transforms.RandomHorizontalFlip(),
+    ])
+
+    transform += [transforms.ToTensor()]
+
+    # transform.append(
+    # affine_transforms.Affine(rotation_range=20.0, translation_range=0.02, fill_mode='constant')
+    # )
+
+    transform += [normalize]
+
+    preprocess = transforms.Compose(transform)
+
 
     # load snapshot of model and optimizer
     if args.resume is not None:
@@ -168,88 +188,73 @@ if __name__ == '__main__':
             epoch = snapshot['epoch']
             model.load_state_dict(snapshot['model'])
             # If this doesn't work, can use optimizer.load_state_dict
-            optimizer.load_state_dict(snapshot['optimizer'])
+            # optimizer.load_state_dict(snapshot['optimizer'])
             print('==> snapshot "{0}" loaded (epoch {1})'.format(args.resume, epoch))
         else:
             raise FileNotFoundError('no snapshot found at "{0}"'.format(args.resume))
-    else:
-        epoch = 0
+    epoch = 0
 
-    for epoch in range(epoch, args.epochs):
-        step = epoch * len(data['train'])
-        adjust_learning_rate(optimizer, epoch)
+    # testing the model
+    model.eval()
+    count = 0
+    offset = 2000
+    for i in range(offset, 10000):
+        image = dataset['images'][i]
+        ans = np.zeros((1, 100))
+        for j in range(11):
+            img_tensor = preprocess(Image.fromarray(image))
+            img_tensor = Variable(torch.stack([img_tensor]).cuda())
 
-        # training the model
-        model.train()
-        sigma = args.noise / ((1 + epoch) ** noise_decay)
-
-        for images, labels in tqdm(loaders['train'], desc = 'epoch %d' % (epoch + 1)):
-            # convert images and labels into cuda tensor
-            images = Variable(images.cuda()).float()
-            labels = Variable(labels.cuda())
-            # initialize optimizer
-            optimizer.zero_grad()
-
-            # forward pass
-            outputs = model.forward(images)
-            loss = loss_fn(outputs, labels.squeeze())
-            # add summary to logger
-            logger.scalar_summary('loss', loss.data[0], step)
-            step += args.batch
-
-            # Add noise to gradients
-            for w in model.parameters():
-                if w.grad is not None:
-                    w.grad.data.normal_(mean = 0, std = sigma)
-
-            # backward pass
-            loss.backward()
-
-            # Clip gradient norms
-            clip_grad_norm(model.parameters(), 10.0)
-
-            optimizer.step()
+            temp_output = model.forward(img_tensor).cpu().data.numpy()
+            temp_softmax = compute_softmax(temp_output)
+            ans += temp_softmax
+        tmp = ans.flatten()
+        # tmp /= num_rep
+        tmp2 = tmp.argsort()[-5:][::-1]
+        if dataset['labels'][i] in tmp2:
+            count += 1
+        if i % 50 == 49:
+            print(count, "/", i - offset + 1, "=", count * 1.0 / (i - offset + 1))
+    print("Validation Accuracy: ", count, " / 10000 = ", count / 100.0)
 
 
-        if args.snapshot != 0 and (epoch + 1) % args.snapshot == 0:
-            # testing the model
-            model.eval()
-            top1 = AverageMeter()
-            top5 = AverageMeter()
-            # for split in ['train', 'val']:
-            #     # sample one batch from dataset
-            #     images, labels = iter(loaders[split]).next()
-            #     images = Variable(images.cuda()).float()
 
-            #     # forward pass
-            #     outputs = model.forward(images).cpu().data
-            #     images = images.cpu().data
+        # top1 = AverageMeter()
+        # top5 = AverageMeter()
+        # for split in ['train', 'val']:
+        #     # sample one batch from dataset
+        #     images, labels = iter(loaders[split]).next()
+        #     images = Variable(images.cuda()).float()
 
-            #     # add summary to logger
-            #     for image, output in zip(images, outputs):
-            #         category = categories[output.numpy().flatten().argmax()]
-            #         category = category.replace('/', '_')
-            #         logger.image_summary('{}-outputs, category: {} '.format(split, category), [reconstruct_image(image)], step)
+        #     # forward pass
+        #     outputs = model.forward(images).cpu().data
+        #     images = images.cpu().data
 
-            for images, labels in tqdm(loaders['val'], desc = 'epoch %d' % (epoch + 1)):
-                outputs = model.forward(Variable(images.cuda())).cpu()
+        #     # add summary to logger
+        #     for image, output in zip(images, outputs):
+        #         category = categories[output.numpy().flatten().argmax()]
+        #         category = category.replace('/', '_')
+        #         logger.image_summary('{}-outputs, category: {} '.format(split, category), [reconstruct_image(image)], step)
 
-                prec1, prec5 = accuracy(outputs.data, labels, topk=(1, 5))
-                top1.update(prec1[0], images.size(0))
-                top5.update(prec5[0], images.size(0))
+        # for images, labels in tqdm(loaders['val'], desc = 'epoch %d' % (epoch + 1)):
+        #     outputs = model.forward(Variable(images.cuda())).cpu()
 
-            if top5.avg > best_top_5:
-                best_top_5 = top5.avg
+            # prec1, prec5 = accuracy(outputs.data, labels, topk=(1, 5))
+            # top1.update(prec1[0], images.size(0))
+            # top5.update(prec5[0], images.size(0))
 
-                # snapshot model and optimizer
-                snapshot = {
-                    'epoch': epoch + 1,
-                    'model': model.state_dict(),
-                    'optimizer': optimizer.state_dict()
-                }
-                torch.save(snapshot, os.path.join(exp_path, 'best.pth'))
-                print('==> saved snapshot to "{0}"'.format(os.path.join(exp_path, 'best.pth')))
+        # if top5.avg > best_top_5:
+        #     best_top_5 = top5.avg
 
-            print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} in validation'.format(top1=top1, top5=top5))
-            logger.scalar_summary('Top 1', top1.avg, epoch)
-            logger.scalar_summary('Top 5', top5.avg, epoch)
+        #     # snapshot model and optimizer
+        #     snapshot = {
+        #         'epoch': epoch + 1,
+        #         'model': model.state_dict(),
+        #         'optimizer': optimizer.state_dict()
+        #     }
+        #     torch.save(snapshot, os.path.join(exp_path, 'best.pth'))
+        #     print('==> saved snapshot to "{0}"'.format(os.path.join(exp_path, 'best.pth')))
+
+        # print(' * Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} in validation'.format(top1=top1, top5=top5))
+        # logger.scalar_summary('Top 1', top1.avg, epoch)
+        # logger.scalar_summary('Top 5', top5.avg, epoch)
